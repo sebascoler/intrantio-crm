@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { collection, doc, setDoc, getDocs, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, updateDoc, onSnapshot, writeBatch, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { INITIAL_CONTACTS, STAGES } from './data';
 import './App.css';
@@ -24,6 +24,18 @@ function initials(name) {
   return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase();
 }
 
+function contactCompletenessScore(contact) {
+  const followupsCount = Array.isArray(contact.followups) ? contact.followups.length : 0;
+  return (
+    ((contact.name || '').trim() ? 1 : 0) +
+    ((contact.role || '').trim() ? 1 : 0) +
+    ((contact.notes || '').trim() ? 2 : 0) +
+    (contact.direct ? 1 : 0) +
+    (Number.isInteger(contact.status) ? contact.status : 0) +
+    followupsCount * 2
+  );
+}
+
 export default function App() {
   const [contacts, setContacts] = useState([]);
   const [companies, setCompanies] = useState({});
@@ -43,9 +55,40 @@ export default function App() {
   useEffect(() => {
     let unsub1, unsub2;
     const init = async () => {
-      // Seed only missing contacts (batch write, not sequential)
+      // Remove duplicate contacts by normalized email, keeping the richest record.
       const snap = await getDocs(collection(db, 'contacts'));
-      const existingIds = new Set(snap.docs.map(d => d.id));
+      const seenByEmail = new Map();
+      const duplicateDocIds = [];
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        const normalizedEmail = (data.email || '').trim().toLowerCase();
+        if (!normalizedEmail) return;
+        const current = { id: d.id, ...data };
+        if (!seenByEmail.has(normalizedEmail)) {
+          seenByEmail.set(normalizedEmail, current);
+          return;
+        }
+        const previous = seenByEmail.get(normalizedEmail);
+        const keepCurrent = contactCompletenessScore(current) > contactCompletenessScore(previous);
+        if (keepCurrent) {
+          duplicateDocIds.push(previous.id);
+          seenByEmail.set(normalizedEmail, current);
+        } else {
+          duplicateDocIds.push(current.id);
+        }
+      });
+
+      if (duplicateDocIds.length > 0) {
+        for (let i = 0; i < duplicateDocIds.length; i += 400) {
+          const batch = writeBatch(db);
+          duplicateDocIds.slice(i, i + 400).forEach((id) => batch.delete(doc(db, 'contacts', id)));
+          await batch.commit();
+        }
+      }
+
+      // Seed only missing contacts (batch write, not sequential)
+      const freshSnap = await getDocs(collection(db, 'contacts'));
+      const existingIds = new Set(freshSnap.docs.map(d => d.id));
       const missing = INITIAL_CONTACTS.filter(c => !existingIds.has(c.id));
 
       if (missing.length > 0) {
@@ -95,6 +138,10 @@ export default function App() {
     if (!comp) return;
     await updateDoc(doc(db, 'companies', comp._id), data);
   }, [companies]);
+
+  const deleteContact = useCallback(async (id) => {
+    await deleteDoc(doc(db, 'contacts', id));
+  }, []);
 
   const filtered = contacts.filter(c => {
     const q = search.toLowerCase();
@@ -266,6 +313,7 @@ export default function App() {
           onClose={() => setPanel(null)}
           updateContact={updateContact}
           updateCompany={updateCompany}
+          deleteContact={deleteContact}
           setPanel={setPanel}
         />
       )}
@@ -554,11 +602,13 @@ function NewContactModal({ contacts, companies, onClose, onSuccess }) {
   );
 }
 
-function PanelOverlay({ panel, contacts, companies, onClose, updateContact, updateCompany, setPanel }) {
+function PanelOverlay({ panel, contacts, companies, onClose, updateContact, updateCompany, deleteContact, setPanel }) {
   const [fuDate, setFuDate] = useState('');
   const [fuText, setFuText] = useState('');
   const [localData, setLocalData] = useState({});
   const [localComp, setLocalComp] = useState({});
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingLead, setDeletingLead] = useState(false);
 
   const contact = panel.type === 'contact' ? contacts.find(c => c.id === panel.id) : null;
   const compName = panel.type === 'company' ? panel.name : contact?.company;
@@ -594,6 +644,17 @@ function PanelOverlay({ panel, contacts, companies, onClose, updateContact, upda
   };
 
   const compContacts = contacts.filter(c => c.company === compName);
+  const handleDeleteLead = async () => {
+    if (!contact) return;
+    setDeletingLead(true);
+    try {
+      await deleteContact(contact.id);
+      onClose();
+    } finally {
+      setDeletingLead(false);
+      setShowDeleteConfirm(false);
+    }
+  };
 
   return (
     <>
@@ -649,6 +710,16 @@ function PanelOverlay({ panel, contacts, companies, onClose, updateContact, upda
               </div>
             </div>
             <div className="panel-divider"></div>
+            <div className="panel-section">
+              <button
+                className="btn btn-danger"
+                onClick={() => setShowDeleteConfirm(true)}
+                type="button"
+              >
+                Eliminar lead
+              </button>
+            </div>
+            <div className="panel-divider"></div>
             <div className="panel-label" style={{marginBottom:8}}>Ficha empresa — {compName}</div>
           </>
         )}
@@ -681,6 +752,27 @@ function PanelOverlay({ panel, contacts, companies, onClose, updateContact, upda
           <textarea className="panel-textarea" value={localComp.notes} onChange={e => setLocalComp(p=>({...p,notes:e.target.value}))} onBlur={e => saveCompany('notes', e.target.value)} placeholder="Notas generales sobre la empresa..." style={{minHeight:50}} />
         </div>
       </div>
+      {showDeleteConfirm && (
+        <div className="modal-overlay" onClick={() => !deletingLead && setShowDeleteConfirm(false)}>
+          <div className="modal modal-confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Confirmar eliminación</h2>
+              <button type="button" className="close-btn" onClick={() => !deletingLead && setShowDeleteConfirm(false)}>✕</button>
+            </div>
+            <p className="confirm-text">
+              Vas a eliminar el lead <strong>{contact?.name}</strong>. Esta acción no se puede deshacer.
+            </p>
+            <div className="confirm-actions">
+              <button className="btn" onClick={() => setShowDeleteConfirm(false)} disabled={deletingLead} type="button">
+                Cancelar
+              </button>
+              <button className="btn btn-danger" onClick={handleDeleteLead} disabled={deletingLead} type="button">
+                {deletingLead ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

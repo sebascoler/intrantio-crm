@@ -70,6 +70,12 @@ select { cursor: pointer; }
 }
 .btn:hover { background: #f4f4f2; }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn.btn-danger {
+  background: #fcebeb;
+  color: #a32d2d;
+  border-color: #f2cfcf;
+}
+.btn.btn-danger:hover:not(:disabled) { background: #f8dede; }
 
 /* Table */
 .table-wrap { overflow-x: auto; }
@@ -189,8 +195,11 @@ select { cursor: pointer; }
   width: 480px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
   position: relative; z-index: 201;
 }
+.modal-confirm { width: 420px; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
 .modal-title { font-size: 16px; font-weight: 600; }
+.confirm-text { font-size: 13px; color: #333; margin-bottom: 1rem; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .form-section { margin-bottom: 1.25rem; }
 .form-section-title {
   font-size: 10px; font-weight: 600; color: #888;
