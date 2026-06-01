@@ -24,6 +24,12 @@ function initials(name) {
   return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase();
 }
 
+function followupSortValue(dateStr) {
+  if (!dateStr) return Number.MAX_SAFE_INTEGER;
+  const ts = Date.parse(dateStr);
+  return Number.isNaN(ts) ? Number.MAX_SAFE_INTEGER : ts;
+}
+
 function contactCompletenessScore(contact) {
   const followupsCount = Array.isArray(contact.followups) ? contact.followups.length : 0;
   return (
@@ -214,9 +220,9 @@ export default function App() {
           <button type="button" className="btn-new-contact" onClick={() => setShowNewContact(true)}>
             + Nuevo contacto
           </button>
-          {['contacts','companies','pipeline'].map((t, i) => (
+          {['contacts','companies','pipeline','followups'].map((t, i) => (
             <button key={t} className={`tab${activeTab === t ? ' active' : ''}`} onClick={() => setActiveTab(t)}>
-              {['Contactos','Empresas','Pipeline'][i]}
+              {['Contactos','Empresas','Pipeline','Follow ups'][i]}
             </button>
           ))}
         </div>
@@ -305,6 +311,10 @@ export default function App() {
         <PipelineTab contacts={contacts} setPanel={setPanel} />
       )}
 
+      {activeTab === 'followups' && (
+        <FollowupsTab contacts={contacts} setPanel={setPanel} />
+      )}
+
       {panel && (
         <PanelOverlay
           panel={panel}
@@ -384,6 +394,60 @@ function PipelineTab({ contacts, setPanel }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function FollowupsTab({ contacts, setPanel }) {
+  const followups = contacts
+    .flatMap(contact =>
+      (contact.followups || []).map((followup, index) => ({
+        id: `${contact.id}-${index}`,
+        contactId: contact.id,
+        contactName: contact.name,
+        company: contact.company,
+        date: followup.date || 'Sin fecha',
+        text: followup.text || '',
+        done: !!followup.done,
+      }))
+    )
+    .sort((a, b) => {
+      const byDate = followupSortValue(a.date) - followupSortValue(b.date);
+      if (byDate !== 0) return byDate;
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      return a.contactName.localeCompare(b.contactName);
+    });
+
+  return (
+    <div className="table-wrap">
+      <table className="contact-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Contacto</th>
+            <th>Empresa</th>
+            <th>Follow-up</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {followups.length === 0 ? (
+            <tr><td colSpan={5} className="empty">No hay follow-ups registrados</td></tr>
+          ) : followups.map(f => (
+            <tr key={f.id} onClick={() => setPanel({ type: 'contact', id: f.contactId })}>
+              <td>{f.date}</td>
+              <td>{f.contactName}</td>
+              <td>{f.company}</td>
+              <td>{f.text || <span className="empty-dash">—</span>}</td>
+              <td>
+                <span className={`badge ${f.done ? 's6' : 's3'}`}>
+                  {f.done ? 'Hecho' : 'Pendiente'}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
