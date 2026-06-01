@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { collection, doc, setDoc, getDocs, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, updateDoc, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 import { INITIAL_CONTACTS, STAGES } from './data';
 import './App.css';
@@ -28,18 +28,30 @@ export default function App() {
   useEffect(() => {
     let unsub1, unsub2;
     const init = async () => {
-      // Check if contacts exist, seed if not
+      // Seed only missing contacts (batch write, not sequential)
       const snap = await getDocs(collection(db, 'contacts'));
-      if (snap.empty) {
+      const existingIds = new Set(snap.docs.map(d => d.id));
+      const missing = INITIAL_CONTACTS.filter(c => !existingIds.has(c.id));
+
+      if (missing.length > 0) {
         setSaving(true);
-        for (const c of INITIAL_CONTACTS) {
-          await setDoc(doc(db, 'contacts', c.id), c);
+        // Batch write in chunks of 400 (Firestore limit is 500)
+        for (let i = 0; i < missing.length; i += 400) {
+          const batch = writeBatch(db);
+          missing.slice(i, i + 400).forEach(c => batch.set(doc(db, 'contacts', c.id), c));
+          await batch.commit();
         }
-        // Seed companies
+        // Seed missing companies
+        const compSnap = await getDocs(collection(db, 'companies'));
+        const existingComps = new Set(compSnap.docs.map(d => d.id));
         const companyNames = [...new Set(INITIAL_CONTACTS.map(c => c.company))];
-        for (const name of companyNames) {
-          const safeId = name.replace(/[^a-zA-Z0-9]/g, '_');
-          await setDoc(doc(db, 'companies', safeId), { name, sector: '', size: '', website: '', pain: '', fit: '', notes: '' });
+        const missingComps = companyNames.filter(n => !existingComps.has(n.replace(/[^a-zA-Z0-9]/g, '_')));
+        if (missingComps.length > 0) {
+          const compBatch = writeBatch(db);
+          missingComps.forEach(name => {
+            compBatch.set(doc(db, 'companies', name.replace(/[^a-zA-Z0-9]/g, '_')), { name, sector: '', size: '', website: '', pain: '', fit: '', notes: '' });
+          });
+          await compBatch.commit();
         }
         setSaving(false);
       }
