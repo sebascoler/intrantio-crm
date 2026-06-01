@@ -95,7 +95,17 @@ export default function App() {
       // Seed only missing contacts (batch write, not sequential)
       const freshSnap = await getDocs(collection(db, 'contacts'));
       const existingIds = new Set(freshSnap.docs.map(d => d.id));
-      const missing = INITIAL_CONTACTS.filter(c => !existingIds.has(c.id));
+      const existingEmails = new Set(
+        freshSnap.docs
+          .map((d) => (d.data().email || '').trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const missing = INITIAL_CONTACTS.filter((c) => {
+        const normalizedEmail = (c.email || '').trim().toLowerCase();
+        const idMissing = !existingIds.has(c.id);
+        const emailMissing = !normalizedEmail || !existingEmails.has(normalizedEmail);
+        return idMissing && emailMissing;
+      });
 
       if (missing.length > 0) {
         setSaving(true);
