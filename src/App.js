@@ -6,6 +6,19 @@ import './App.css';
 
 const STAGE_CLASS = ['s0','s1','s2','s3','s4','s5','s6'];
 
+const EMPTY_CONTACT_FORM = {
+  name: '', email: '', company: '', role: '', direct: false,
+  status: 0, notes: '', followup: { date: '', text: '' },
+};
+
+function sanitizeId(str) {
+  return str.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 function initials(name) {
   const p = (name || '').trim().split(' ');
   return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase();
@@ -22,6 +35,8 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [panel, setPanel] = useState(null); // {type:'contact'|'company', id}
   const [saving, setSaving] = useState(false);
+  const [showNewContact, setShowNewContact] = useState(false);
+  const [highlightId, setHighlightId] = useState(null);
   const PER_PAGE = 20;
 
   // Load data from Firestore
@@ -92,6 +107,31 @@ export default function App() {
   const totalPages = Math.ceil(filtered.length / PER_PAGE);
   const pageData = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
+  useEffect(() => {
+    if (!highlightId) return;
+    const c = contacts.find(x => x.id === highlightId);
+    if (!c) return;
+    const idx = filtered.findIndex(x => x.id === highlightId);
+    if (idx >= 0) {
+      const pageNum = Math.floor(idx / PER_PAGE) + 1;
+      setPage(p => (p !== pageNum ? pageNum : p));
+    }
+    const timer = setTimeout(() => {
+      const el = document.querySelector(`[data-contact-id="${highlightId}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+    const clear = setTimeout(() => setHighlightId(null), 3000);
+    return () => { clearTimeout(timer); clearTimeout(clear); };
+  }, [highlightId, contacts, filtered]);
+
+  const handleNewContactSuccess = (id) => {
+    setActiveTab('contacts');
+    setSearch('');
+    setFilterStatus('');
+    setFilterDirect('');
+    setHighlightId(id);
+  };
+
   const stats = {
     total: contacts.length,
     direct: contacts.filter(c => c.direct).length,
@@ -123,12 +163,17 @@ export default function App() {
     <div className="app">
       <div className="topbar">
         <div className="brand">interantio <span>CRM</span></div>
-        <div className="tabs">
-          {['contacts','companies','pipeline'].map((t, i) => (
-            <button key={t} className={`tab${activeTab === t ? ' active' : ''}`} onClick={() => setActiveTab(t)}>
-              {['Contactos','Empresas','Pipeline'][i]}
-            </button>
-          ))}
+        <div className="topbar-actions">
+          <div className="tabs">
+            {['contacts','companies','pipeline'].map((t, i) => (
+              <button key={t} className={`tab${activeTab === t ? ' active' : ''}`} onClick={() => setActiveTab(t)}>
+                {['Contactos','Empresas','Pipeline'][i]}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="btn-new-contact" onClick={() => setShowNewContact(true)}>
+            + Nuevo contacto
+          </button>
         </div>
       </div>
 
@@ -172,7 +217,12 @@ export default function App() {
                   const pending = (c.followups || []).filter(f => !f.done).sort((a,b) => a.date > b.date ? 1 : -1);
                   const next = pending[0];
                   return (
-                    <tr key={c.id} onClick={() => setPanel({ type: 'contact', id: c.id })}>
+                    <tr
+                      key={c.id}
+                      data-contact-id={c.id}
+                      className={highlightId === c.id ? 'row-highlight' : ''}
+                      onClick={() => setPanel({ type: 'contact', id: c.id })}
+                    >
                       <td>
                         <div className="contact-cell">
                           <div className="initials-circle">{initials(c.name)}</div>
@@ -219,6 +269,15 @@ export default function App() {
           updateContact={updateContact}
           updateCompany={updateCompany}
           setPanel={setPanel}
+        />
+      )}
+
+      {showNewContact && (
+        <NewContactModal
+          contacts={contacts}
+          companies={companies}
+          onClose={() => setShowNewContact(false)}
+          onSuccess={handleNewContactSuccess}
         />
       )}
     </div>
@@ -279,6 +338,220 @@ function PipelineTab({ contacts, setPanel }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function NewContactModal({ contacts, companies, onClose, onSuccess }) {
+  const [form, setForm] = useState({ ...EMPTY_CONTACT_FORM });
+  const [formSaving, setFormSaving] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const companyNames = Object.keys(companies);
+  const suggestions = form.company.trim()
+    ? companyNames.filter(n => n.toLowerCase().includes(form.company.toLowerCase())).slice(0, 8)
+    : [];
+
+  const resetAndClose = () => {
+    setForm({ ...EMPTY_CONTACT_FORM });
+    setEmailError('');
+    setFormError('');
+    setShowSuggestions(false);
+    onClose();
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setEmailError('');
+    setFormError('');
+
+    if (!form.name.trim()) {
+      setFormError('El nombre es obligatorio');
+      return;
+    }
+    if (!form.email.trim()) {
+      setFormError('El email es obligatorio');
+      return;
+    }
+    if (!isValidEmail(form.email.trim())) {
+      setFormError('Introduce un email válido');
+      return;
+    }
+
+    const emailLower = form.email.trim().toLowerCase();
+    if (contacts.some(c => c.email?.toLowerCase() === emailLower)) {
+      setEmailError('Ya existe un contacto con este email');
+      return;
+    }
+
+    const id = sanitizeId(form.email);
+    const companyName = form.company.trim();
+    const companyId = sanitizeId(companyName);
+
+    setFormSaving(true);
+    try {
+      await setDoc(doc(db, 'contacts', id), {
+        id,
+        name: form.name.trim(),
+        email: emailLower,
+        company: companyName,
+        direct: form.direct,
+        status: Number(form.status) || 0,
+        notes: form.notes.trim(),
+        followups: form.followup.text
+          ? [{ date: form.followup.date || 'Sin fecha', text: form.followup.text.trim(), done: false }]
+          : [],
+        role: form.role.trim(),
+        lastContact: null,
+      });
+
+      if (companyName && !companies[companyName]) {
+        await setDoc(doc(db, 'companies', companyId), {
+          name: companyName,
+          sector: '', size: '', website: '', pain: '', fit: '', notes: '',
+        });
+      }
+
+      setForm({ ...EMPTY_CONTACT_FORM });
+      onSuccess(id);
+      onClose();
+    } catch {
+      setFormError('Error al guardar. Intenta de nuevo.');
+    } finally {
+      setFormSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={resetAndClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Nuevo contacto</h2>
+          <button type="button" className="close-btn" onClick={resetAndClose}>✕</button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-section">
+            <div className="form-section-title">Contacto</div>
+            <div className="form-group">
+              <label className="form-label">Nombre *</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Nombre completo"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email *</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setEmailError(''); }}
+                placeholder="email@empresa.com"
+              />
+              {emailError && <div className="form-error">{emailError}</div>}
+            </div>
+            <div className="form-group form-group-autocomplete">
+              <label className="form-label">Empresa</label>
+              <input
+                type="text"
+                value={form.company}
+                onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                placeholder="Nombre de la empresa"
+                autoComplete="off"
+              />
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="autocomplete-list">
+                  {suggestions.map(name => (
+                    <div
+                      key={name}
+                      className="autocomplete-item"
+                      onMouseDown={() => {
+                        setForm(f => ({ ...f, company: name }));
+                        setShowSuggestions(false);
+                      }}
+                    >
+                      {name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="form-group">
+              <label className="form-label">Rol</label>
+              <input
+                type="text"
+                value={form.role}
+                onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                placeholder="Ej: Innovation Manager"
+              />
+            </div>
+            <div className="toggle-row">
+              <span className="form-label" style={{ margin: 0 }}>Contacto directo</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={form.direct}
+                  onChange={e => setForm(f => ({ ...f, direct: e.target.checked }))}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div className="form-section">
+            <div className="form-section-title">Estado inicial</div>
+            <div className="form-group">
+              <label className="form-label">Estado del pipeline</label>
+              <select
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: parseInt(e.target.value, 10) }))}
+              >
+                {STAGES.map((s, i) => <option key={i} value={i}>{s}</option>)}
+              </select>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Fecha follow-up</label>
+                <input
+                  type="date"
+                  value={form.followup.date}
+                  onChange={e => setForm(f => ({ ...f, followup: { ...f.followup, date: e.target.value } }))}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Texto follow-up</label>
+                <input
+                  type="text"
+                  value={form.followup.text}
+                  onChange={e => setForm(f => ({ ...f, followup: { ...f.followup, text: e.target.value } }))}
+                  placeholder="Descripción..."
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Notas iniciales</label>
+              <textarea
+                value={form.notes}
+                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Contexto, notas..."
+                rows={3}
+              />
+            </div>
+          </div>
+
+          {formError && <div className="form-error" style={{ marginBottom: 12 }}>{formError}</div>}
+
+          <button type="submit" className="btn-save" disabled={formSaving}>
+            {formSaving ? 'Guardando...' : 'Guardar contacto'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
