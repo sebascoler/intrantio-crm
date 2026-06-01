@@ -35,6 +35,17 @@ body {
 }
 .btn-new-contact:hover { opacity: .9; }
 
+@media (max-width: 900px) {
+  .topbar { align-items: flex-start; }
+  .topbar-actions { width: 100%; justify-content: space-between; }
+}
+
+@media (max-width: 640px) {
+  .topbar-actions { flex-direction: column; align-items: stretch; }
+  .tabs { width: 100%; justify-content: space-between; }
+  .btn-new-contact { width: 100%; }
+}
+
 /* Stats */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 1.25rem; }
 .stat { background: #fff; border: 0.5px solid #e5e5e3; border-radius: 8px; padding: .75rem 1rem; }
