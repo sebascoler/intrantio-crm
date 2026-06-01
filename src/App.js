@@ -163,17 +163,15 @@ export default function App() {
     <div className="app">
       <div className="topbar">
         <div className="brand">interantio <span>CRM</span></div>
-        <div className="topbar-actions">
-          <div className="tabs">
-            {['contacts','companies','pipeline'].map((t, i) => (
-              <button key={t} className={`tab${activeTab === t ? ' active' : ''}`} onClick={() => setActiveTab(t)}>
-                {['Contactos','Empresas','Pipeline'][i]}
-              </button>
-            ))}
-          </div>
+        <div className="tabs">
           <button type="button" className="btn-new-contact" onClick={() => setShowNewContact(true)}>
             + Nuevo contacto
           </button>
+          {['contacts','companies','pipeline'].map((t, i) => (
+            <button key={t} className={`tab${activeTab === t ? ' active' : ''}`} onClick={() => setActiveTab(t)}>
+              {['Contactos','Empresas','Pipeline'][i]}
+            </button>
+          ))}
         </div>
       </div>
 

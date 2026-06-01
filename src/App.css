@@ -24,12 +24,11 @@ body {
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px; }
 .brand { font-size: 18px; font-weight: 600; color: #1a1a1a; letter-spacing: -0.3px; }
 .brand span { color: #185FA5; }
-.topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .tabs { display: flex; gap: 3px; background: #efefed; padding: 3px; border-radius: 8px; }
 .tab { padding: 6px 14px; font-size: 13px; font-family: inherit; border: none; background: transparent; cursor: pointer; border-radius: 6px; color: #666; transition: all .15s; }
 .tab.active { background: #fff; color: #1a1a1a; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .btn-new-contact {
-  padding: 7px 14px; font-size: 13px; font-family: inherit;
+  padding: 6px 12px; font-size: 13px; font-family: inherit;
   background: #185FA5; color: #fff; border: none; border-radius: 7px;
   cursor: pointer; white-space: nowrap; transition: opacity .15s;
 }
@@ -37,13 +36,11 @@ body {
 
 @media (max-width: 900px) {
   .topbar { align-items: flex-start; }
-  .topbar-actions { width: 100%; justify-content: space-between; }
+  .tabs { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
 }
 
 @media (max-width: 640px) {
-  .topbar-actions { flex-direction: column; align-items: stretch; }
-  .tabs { width: 100%; justify-content: space-between; }
-  .btn-new-contact { width: 100%; }
+  .tabs { width: 100%; }
 }
 
 /* Stats */
