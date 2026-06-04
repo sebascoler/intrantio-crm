@@ -167,7 +167,41 @@ select { cursor: pointer; }
 .stage-pill.s5.active { background: #fcebeb; color: #A32D2D; border-color: #A32D2D; }
 .stage-pill.s6.active { background: #e1f5ee; color: #0F6E56; border-color: #0F6E56; }
 
-/* Follow-ups */
+/* Follow-ups tab */
+.followups-filters { margin-bottom: 0.75rem; }
+.followups-show-done {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #444; cursor: pointer; user-select: none;
+}
+.followups-show-done input { width: 15px; height: 15px; cursor: pointer; accent-color: #185FA5; }
+.followups-table tr.fu-row-overdue td {
+  background: #fff5f5;
+  border-top: 2px solid #d45c5c;
+  border-bottom: 2px solid #d45c5c;
+}
+.followups-table tr.fu-row-overdue td:first-child { border-left: 2px solid #d45c5c; }
+.followups-table tr.fu-row-overdue td:last-child { border-right: 2px solid #d45c5c; }
+.followups-table tr.fu-row-overdue:hover td { background: #ffecec; }
+.followups-table tr.fu-row-today td {
+  background: #fffdf0;
+  border-top: 2px solid #c9a227;
+  border-bottom: 2px solid #c9a227;
+}
+.followups-table tr.fu-row-today td:first-child { border-left: 2px solid #c9a227; }
+.followups-table tr.fu-row-today td:last-child { border-right: 2px solid #c9a227; }
+.followups-table tr.fu-row-today:hover td { background: #fff9e0; }
+.followups-table td:last-child {
+  display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+}
+.followups-table .fu-strike { text-decoration: line-through; color: #999; }
+.badge.fu-badge-overdue {
+  background: #fcebeb; color: #a32d2d; margin-right: 6px; text-transform: lowercase;
+}
+.badge.fu-badge-today {
+  background: #faeeda; color: #854f0b; margin-right: 6px; text-transform: lowercase;
+}
+
+/* Follow-ups panel */
 .fu-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #f8f7f5; border-radius: 7px; font-size: 13px; }
 .fu-done .fu-text { text-decoration: line-through; color: #aaa; }
 .fu-text { font-size: 13px; }

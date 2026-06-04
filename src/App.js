@@ -30,6 +30,19 @@ function followupSortValue(dateStr) {
   return Number.isNaN(ts) ? Number.MAX_SAFE_INTEGER : ts;
 }
 
+function followupUrgency(dateStr, done) {
+  if (done || !dateStr || dateStr === 'Sin fecha') return null;
+  const ts = Date.parse(dateStr);
+  if (Number.isNaN(ts)) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  if (d.getTime() < today.getTime()) return 'overdue';
+  if (d.getTime() === today.getTime()) return 'today';
+  return null;
+}
+
 function contactCompletenessScore(contact) {
   const followupsCount = Array.isArray(contact.followups) ? contact.followups.length : 0;
   return (
@@ -409,6 +422,8 @@ function PipelineTab({ contacts, setPanel }) {
 }
 
 function FollowupsTab({ contacts, setPanel }) {
+  const [showCompleted, setShowCompleted] = useState(false);
+
   const followups = contacts
     .flatMap(contact =>
       (contact.followups || []).map((followup, index) => ({
@@ -419,8 +434,10 @@ function FollowupsTab({ contacts, setPanel }) {
         date: followup.date || 'Sin fecha',
         text: followup.text || '',
         done: !!followup.done,
+        urgency: followupUrgency(followup.date, !!followup.done),
       }))
     )
+    .filter(f => showCompleted || !f.done)
     .sort((a, b) => {
       const byDate = followupSortValue(a.date) - followupSortValue(b.date);
       if (byDate !== 0) return byDate;
@@ -429,36 +446,62 @@ function FollowupsTab({ contacts, setPanel }) {
     });
 
   return (
-    <div className="table-wrap">
-      <table className="contact-table">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Contacto</th>
-            <th>Empresa</th>
-            <th>Follow-up</th>
-            <th>Estado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {followups.length === 0 ? (
-            <tr><td colSpan={5} className="empty">No hay follow-ups registrados</td></tr>
-          ) : followups.map(f => (
-            <tr key={f.id} onClick={() => setPanel({ type: 'contact', id: f.contactId })}>
-              <td>{f.date}</td>
-              <td>{f.contactName}</td>
-              <td>{f.company}</td>
-              <td>{f.text || <span className="empty-dash">—</span>}</td>
-              <td>
-                <span className={`badge ${f.done ? 's6' : 's3'}`}>
-                  {f.done ? 'Hecho' : 'Pendiente'}
-                </span>
-              </td>
+    <>
+      <div className="filters followups-filters">
+        <label className="followups-show-done">
+          <input
+            type="checkbox"
+            checked={showCompleted}
+            onChange={e => setShowCompleted(e.target.checked)}
+          />
+          Mostrar realizados
+        </label>
+      </div>
+      <div className="table-wrap">
+        <table className="contact-table followups-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Contacto</th>
+              <th>Empresa</th>
+              <th>Follow-up</th>
+              <th>Estado</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {followups.length === 0 ? (
+              <tr><td colSpan={5} className="empty">No hay follow-ups registrados</td></tr>
+            ) : followups.map(f => (
+              <tr
+                key={f.id}
+                className={[
+                  f.done ? 'fu-row-done' : '',
+                  f.urgency === 'overdue' ? 'fu-row-overdue' : '',
+                  f.urgency === 'today' ? 'fu-row-today' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => setPanel({ type: 'contact', id: f.contactId })}
+              >
+                <td className={f.done ? 'fu-strike' : ''}>{f.date}</td>
+                <td className={f.done ? 'fu-strike' : ''}>{f.contactName}</td>
+                <td className={f.done ? 'fu-strike' : ''}>{f.company}</td>
+                <td className={f.done ? 'fu-strike' : ''}>{f.text || <span className="empty-dash">—</span>}</td>
+                <td>
+                  {f.urgency === 'overdue' && (
+                    <span className="badge fu-badge-overdue">overdue</span>
+                  )}
+                  {f.urgency === 'today' && (
+                    <span className="badge fu-badge-today">today</span>
+                  )}
+                  <span className={`badge ${f.done ? 's6' : 's3'}`}>
+                    {f.done ? 'Hecho' : 'Pendiente'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
